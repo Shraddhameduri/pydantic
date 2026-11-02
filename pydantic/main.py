@@ -1216,9 +1216,16 @@ class BaseModel(metaclass=_model_construction.ModelMetaclass):
                 # See GH-7444 and GH-7825 for rationale and a performance benchmark
 
                 # First, do the fast (and sometimes faulty) __dict__ comparison
-                if self.__dict__ == other.__dict__:
-                    # If the check above passes, then pydantic fields are equal, we can return early
-                    return True
+                try:
+                    if self.__dict__ == other.__dict__:
+                        # If the check above passes, then pydantic fields are equal, we can return early
+                        return True
+                except (ValueError, TypeError):
+                    # Non-field values stored in `__dict__` (e.g. by `cached_property`) may raise
+                    # when compared, e.g. a numpy array raises a `ValueError` as its truth value is
+                    # ambiguous. Such values are meant to be ignored, so fall through to the
+                    # field-only comparison below instead of letting the exception escape.
+                    pass
 
                 # We don't want to trigger unnecessary costly filtering of __dict__ on all unequal objects, so we return
                 # early if there are no keys to ignore (we would just return False later on anyway)

@@ -2844,6 +2844,69 @@ def test_model_equality_private_attrs(InnerEqualityModel):
     assert m3 == m3_equal
 
 
+def test_model_equality_cached_property_numpy_array():
+    """https://github.com/pydantic/pydantic/issues/14068"""
+    np = pytest.importorskip('numpy')
+
+    class Model(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
+        value: int
+
+        @cached_property
+        def derived(self) -> Any:
+            return np.array([self.value, self.value])
+
+    m1 = Model(value=1)
+    m2 = Model(value=1)
+    assert m1 == m2
+
+    # Only one instance has the cached property value in its `__dict__`:
+    assert m1.derived is not None
+    assert m1 == m2
+
+    # Both instances have it: comparing the arrays raises a `ValueError` if the
+    # whole-`__dict__` comparison is not exception-safe, but the cached value
+    # should simply be ignored:
+    assert m2.derived is not None
+    assert m1 == m2
+    assert {m1: 'found'}[m2] == 'found'
+
+    m3 = Model(value=2)
+    assert m3.derived is not None
+    assert m1 != m3
+
+
+def test_model_equality_cached_property_non_bool_eq():
+    """https://github.com/pydantic/pydantic/issues/14068"""
+
+    class NonBoolComparable:
+        def __eq__(self, other):
+            return self
+
+        def __bool__(self):
+            raise ValueError('The truth value is ambiguous')
+
+    class Model(BaseModel):
+        model_config = ConfigDict(frozen=True)
+
+        value: int
+
+        @cached_property
+        def derived(self) -> NonBoolComparable:
+            return NonBoolComparable()
+
+    m1 = Model(value=1)
+    m2 = Model(value=1)
+    assert m1.derived is not None
+    assert m2.derived is not None
+    assert m1 == m2
+
+    m3 = Model(value=2)
+    assert m3.derived is not None
+    assert m1 != m3
+
+
 def test_model_copy_extra():
     class Model(BaseModel, extra='allow'):
         x: int
